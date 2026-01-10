@@ -1,0 +1,52 @@
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: job_discovery_db
+    environment:
+      POSTGRES_USER: jobagent
+      POSTGRES_PASSWORD: jobagent123
+      POSTGRES_DB: job_discovery
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jobagent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: job_discovery_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    command: redis-server --appendonly yes
+
+  # pgAdmin (optional, for database management UI)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: job_discovery_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@jobagent.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
+volumes:
+  postgres_data:
+  redis_data:
+  pgadmin_data:
