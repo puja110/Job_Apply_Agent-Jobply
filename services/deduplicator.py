@@ -1,5 +1,6 @@
 # services/deduplicator.py
 import hashlib
+import json  # ADD THIS IMPORT
 from difflib import SequenceMatcher
 from typing import Optional
 import logging
@@ -34,11 +35,11 @@ class JobDeduplicator:
             logger.info(f"Duplicate found by content hash: {raw_job.url}")
             return True, existing
         
-        # Strategy 3: Fuzzy matching (expensive, only for recent jobs)
-        existing = await self._check_fuzzy_duplicate(raw_job)
-        if existing:
-            logger.info(f"Duplicate found by fuzzy match: {raw_job.url}")
-            return True, existing
+        # Strategy 3: Fuzzy matching (DISABLED FOR NOW)
+        # existing = await self._check_fuzzy_duplicate(raw_job)
+        # if existing:
+        #     logger.info(f"Duplicate found by fuzzy match: {raw_job.url}")
+        #     return True, existing
         
         return False, None
     
@@ -91,10 +92,14 @@ class JobDeduplicator:
             return None
         
         async with self.db.acquire() as conn:
-            # Get recent jobs from same company
+            # Use PostgreSQL JSON operators to extract fields
             recent_jobs = await conn.fetch(
                 """
-                SELECT id, raw_data FROM raw_jobs
+                SELECT 
+                    id, 
+                    raw_data->>'title' as title,
+                    raw_data->>'company' as company
+                FROM raw_jobs
                 WHERE platform = $1
                   AND raw_data->>'company' ILIKE $2
                   AND scraped_at > NOW() - INTERVAL '7 days'
@@ -105,7 +110,14 @@ class JobDeduplicator:
             )
             
             for job in recent_jobs:
-                existing_title = job['raw_data'].get('title', '').lower()
+                # Now job['title'] and job['company'] are already strings
+                existing_title = (job['title'] or '').lower()
+                existing_company = (job['company'] or '').lower()
+                
+                # Skip if no title
+                if not existing_title:
+                    continue
+                
                 similarity = SequenceMatcher(
                     None, 
                     title, 

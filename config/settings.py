@@ -8,11 +8,15 @@ class Settings(BaseSettings):
     
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
+
+    # RapidAPI
+    RAPIDAPI_KEY: Optional[str] = None
     
     # Rate Limiting (requests per minute)
     INDEED_RATE_LIMIT: int = 6
     LINKEDIN_RATE_LIMIT: int = 10
     GLASSDOOR_RATE_LIMIT: int = 10
+    JSEARCH_RATE_LIMIT: int = 10
     
     # Scraping
     REQUEST_TIMEOUT: int = 30

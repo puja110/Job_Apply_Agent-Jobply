@@ -68,6 +68,7 @@ class PlatformRateLimiter:
             "indeed": RateLimiter(settings.INDEED_RATE_LIMIT),
             "linkedin": RateLimiter(settings.LINKEDIN_RATE_LIMIT),
             "glassdoor": RateLimiter(settings.GLASSDOOR_RATE_LIMIT),
+            "jsearch": RateLimiter(settings.JSEARCH_RATE_LIMIT),
         }
         
     async def acquire(self, platform: str) -> None:

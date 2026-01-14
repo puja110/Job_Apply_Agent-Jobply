@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from typing import List, Optional
 import logging
 import asyncio
+import json  # ADD THIS
 from datetime import datetime
 
 from models.job import RawJob, Job
@@ -53,17 +54,19 @@ class BaseJobAgent(ABC):
             result.results_count = len(raw_jobs)
             
             # Process and store jobs
-            for raw_job in raw_jobs:
+            for idx, raw_job in enumerate(raw_jobs, 1):
                 try:
                     # Check for duplicates
                     is_dup, existing_id = await self.deduplicator.is_duplicate(raw_job)
                     
                     if is_dup:
                         result.duplicate_jobs_count += 1
+                        logger.debug(f"Job {idx}/{len(raw_jobs)} is duplicate: {raw_job.url}")
                         continue
                     
                     # Store raw job
                     raw_job_id = await self._store_raw_job(raw_job)
+                    logger.debug(f"Stored raw job {idx}/{len(raw_jobs)}: {raw_job_id}")
                     
                     # Normalize and store processed job
                     job = await self._normalize_job(raw_job)
@@ -71,12 +74,15 @@ class BaseJobAgent(ABC):
                     await self._store_job(job)
                     
                     result.new_jobs_count += 1
+                    logger.info(f"Job {idx}/{len(raw_jobs)} inserted: {job.title} at {job.company}")
                     
                 except Exception as e:
                     logger.error(
-                        f"Error processing job {raw_job.url}: {e}",
-                        exc_info=True
+                        f"Error processing job {idx}/{len(raw_jobs)} - {raw_job.url}: {e}",
+                        exc_info=True  # This shows full stack trace
                     )
+                    # Don't increment any counter for failed jobs
+                    continue
             
             result.status = SearchStatus.COMPLETED
             result.completed_at = datetime.utcnow()
@@ -110,6 +116,11 @@ class BaseJobAgent(ABC):
         search_params: JobSearchParams
     ) -> str:
         """Create initial search record in database."""
+        # Convert Pydantic model to JSON-compatible dict
+        filters = search_params.model_dump(
+            exclude={'query', 'location', 'platform'}
+        )
+        
         async with self.db.acquire() as conn:
             result = await conn.fetchrow(
                 """
@@ -117,13 +128,13 @@ class BaseJobAgent(ABC):
                     search_query, location, platform, filters, 
                     started_at, status
                 )
-                VALUES ($1, $2, $3, $4, $5, $6)
+                VALUES ($1, $2, $3, $4::jsonb, $5, $6)
                 RETURNING id
                 """,
                 search_params.query,
                 search_params.location,
                 self.platform,
-                search_params.dict(exclude={'query', 'location', 'platform'}),
+                json.dumps(filters),  # Convert to JSON string
                 datetime.utcnow(),
                 SearchStatus.PENDING.value
             )
@@ -162,7 +173,7 @@ class BaseJobAgent(ABC):
                     platform, external_id, url, raw_data, 
                     scraped_at, content_hash
                 )
-                VALUES ($1, $2, $3, $4, $5, $6)
+                VALUES ($1, $2, $3, $4::jsonb, $5, $6)
                 ON CONFLICT (platform, url) DO UPDATE
                 SET raw_data = EXCLUDED.raw_data,
                     scraped_at = EXCLUDED.scraped_at
@@ -171,7 +182,7 @@ class BaseJobAgent(ABC):
                 raw_job.platform,
                 raw_job.external_id,
                 str(raw_job.url),
-                raw_job.raw_data,
+                json.dumps(raw_job.raw_data),  # Convert to JSON string
                 raw_job.scraped_at,
                 raw_job.content_hash
             )
@@ -191,8 +202,8 @@ class BaseJobAgent(ABC):
                     skills, keywords, processed_at, status
                 )
                 VALUES (
-                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-                    $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
+                    $1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+                    $13, $14, $15, $16, $17, $18, $19, $20::jsonb, $21::jsonb, $22, $23
                 )
                 ON CONFLICT (platform, platform_url) DO UPDATE
                 SET title = EXCLUDED.title,
@@ -210,6 +221,8 @@ class BaseJobAgent(ABC):
                 job.posted_date, job.expires_date,
                 job.platform, str(job.platform_url), 
                 str(job.apply_url) if job.apply_url else None,
-                job.skills, job.keywords, job.processed_at, job.status
+                json.dumps(job.skills),  # Convert list to JSON
+                json.dumps(job.keywords),  # Convert list to JSON
+                job.processed_at, job.status
             )
             return str(result['id'])
