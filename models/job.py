@@ -1,8 +1,9 @@
 # models/job.py
-from pydantic import BaseModel, HttpUrl, Field, validator
-from typing import Optional, List
+from pydantic import BaseModel, HttpUrl, Field, field_validator
+from typing import Optional, List, Union
 from datetime import datetime
 from enum import Enum
+from uuid import UUID
 import hashlib
 import json
 
@@ -29,7 +30,7 @@ class RawJob(BaseModel):
     """Raw job data as scraped from platform."""
     platform: str
     external_id: Optional[str] = None
-    url: HttpUrl
+    url: Union[HttpUrl, str]  # Allow string URLs
     raw_data: dict
     scraped_at: datetime = Field(default_factory=datetime.utcnow)
     
@@ -48,14 +49,14 @@ class RawJob(BaseModel):
 
 class Job(BaseModel):
     """Normalized job data."""
-    id: Optional[str] = None
-    raw_job_id: Optional[str] = None
+    id: Optional[Union[str, UUID]] = None  # Accept both string and UUID
+    raw_job_id: Optional[Union[str, UUID]] = None
     
     # Core fields
     title: str
     company: str
     location: Optional[str] = None
-    location_type: Optional[LocationType] = None
+    location_type: Optional[Union[LocationType, str]] = None  # Accept string too
     
     # Job details
     description: str
@@ -69,32 +70,39 @@ class Job(BaseModel):
     salary_period: Optional[str] = None
     
     # Metadata
-    employment_type: Optional[EmploymentType] = None
-    experience_level: Optional[ExperienceLevel] = None
-    posted_date: Optional[datetime] = None
-    expires_date: Optional[datetime] = None
+    employment_type: Optional[Union[EmploymentType, str]] = None  # Accept string too
+    experience_level: Optional[Union[ExperienceLevel, str]] = None
+    posted_date: Optional[Union[datetime, str]] = None  # Accept string dates
+    expires_date: Optional[Union[datetime, str]] = None
     
     # Platform info
     platform: str
-    platform_url: HttpUrl
-    apply_url: Optional[HttpUrl] = None
+    platform_url: Union[HttpUrl, str]  # Accept string URLs
+    apply_url: Optional[Union[HttpUrl, str]] = None
     
     # Derived fields
-    skills: List[str] = []
-    keywords: List[str] = []
+    skills: List[str] = Field(default_factory=list)
+    keywords: List[str] = Field(default_factory=list)
+    
+    # Additional fields for compatibility
+    source: Optional[str] = None
     
     # Processing
-    processed_at: datetime = Field(default_factory=datetime.utcnow)
+    processed_at: Optional[datetime] = Field(default=None)
+    last_updated: Optional[datetime] = None
     status: str = "active"
     
-    @validator('title', 'company', 'description')
+    # Validators (Pydantic v2 style)
+    @field_validator('title', 'company', 'description')
+    @classmethod
     def clean_text(cls, v):
         """Remove extra whitespace and normalize."""
         if v:
             return ' '.join(v.split())
         return v
     
-    @validator('location_type', pre=True)
+    @field_validator('location_type', mode='before')
+    @classmethod
     def parse_location_type(cls, v):
         """Infer location type from description."""
         if not v:
@@ -106,3 +114,25 @@ class Job(BaseModel):
             return LocationType.HYBRID
         else:
             return LocationType.ONSITE
+    
+    @field_validator('id', 'raw_job_id', mode='before')
+    @classmethod
+    def convert_uuid_to_str(cls, v):
+        """Convert UUID to string if needed."""
+        if isinstance(v, UUID):
+            return str(v)
+        return v
+    
+    def __init__(self, **data):
+        """Initialize with UUID conversion"""
+        # Convert UUIDs to strings
+        if 'id' in data and isinstance(data['id'], UUID):
+            data['id'] = str(data['id'])
+        if 'raw_job_id' in data and isinstance(data['raw_job_id'], UUID):
+            data['raw_job_id'] = str(data['raw_job_id'])
+        
+        super().__init__(**data)
+    
+    class Config:
+        use_enum_values = True
+        arbitrary_types_allowed = True

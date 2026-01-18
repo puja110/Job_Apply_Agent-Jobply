@@ -22,11 +22,11 @@ class JSearchAgent(BaseJobAgent):
         super().__init__("jsearch", rate_limiter, deduplicator, db_pool)
         
         # Get API key from environment
-        self.api_key = settings.RAPIDAPI_KEY
+        self.api_key = settings.JSEARCH_API_KEY
         if not self.api_key:
             raise ValueError(
-                "RAPIDAPI_KEY not found in .env file. "
-                "Please add: RAPIDAPI_KEY=your_key_here"
+                "JSEARCH_API_KEY not found in .env file. "
+                "Please add: JSEARCH_API_KEY=your_key_here"
             )
         
         self.client = httpx.AsyncClient(

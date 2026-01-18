@@ -1,8 +1,8 @@
 # services/embeddings.py
 from sentence_transformers import SentenceTransformer
-from typing import List, Dict
+from typing import List, Dict, Union
 import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.metrics.pairwise import cosine_similarity as sklearn_cosine_similarity
 import logging
 
 logger = logging.getLogger(__name__)
@@ -23,9 +23,62 @@ class EmbeddingService:
         self.embedding_dim = self.model.get_sentence_embedding_dimension()
         logger.info(f"Model loaded. Embedding dimension: {self.embedding_dim}")
     
+    def encode(self, texts: Union[str, List[str]], normalize: bool = True) -> np.ndarray:
+        """
+        Generate embeddings for text(s) - returns numpy arrays.
+        Compatible with scoring_engine.py expectations.
+        
+        Args:
+            texts: Single text string or list of texts
+            normalize: If True, normalize embeddings to unit length
+            
+        Returns:
+            numpy array of embeddings
+        """
+        if isinstance(texts, str):
+            texts = [texts]
+        
+        if not texts:
+            return np.array([])
+        
+        # Filter out empty texts
+        valid_texts = [t if t and t.strip() else "" for t in texts]
+        embeddings = self.model.encode(
+            valid_texts, 
+            convert_to_numpy=True,
+            normalize_embeddings=normalize,
+            show_progress_bar=False
+        )
+        
+        return embeddings
+    
+    def cosine_similarity(self, embedding1: np.ndarray, embedding2: np.ndarray) -> float:
+        """
+        Compute cosine similarity between two embeddings (numpy arrays).
+        Compatible with scoring_engine.py expectations.
+        
+        Args:
+            embedding1: First embedding vector (numpy array)
+            embedding2: Second embedding vector (numpy array)
+            
+        Returns:
+            Similarity score between -1 and 1 (typically 0 to 1 for normalized embeddings)
+        """
+        # Handle 1D arrays
+        if len(embedding1.shape) == 1:
+            embedding1 = embedding1.reshape(1, -1)
+        if len(embedding2.shape) == 1:
+            embedding2 = embedding2.reshape(1, -1)
+        
+        # Compute cosine similarity
+        similarity = sklearn_cosine_similarity(embedding1, embedding2)[0][0]
+        
+        return float(similarity)
+    
+    # Legacy methods (for backward compatibility)
     def generate_embedding(self, text: str) -> List[float]:
         """
-        Generate embedding for a single text.
+        Generate embedding for a single text (legacy method).
         
         Args:
             text: Input text
@@ -41,7 +94,7 @@ class EmbeddingService:
     
     def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
         """
-        Generate embeddings for multiple texts (batch processing).
+        Generate embeddings for multiple texts (legacy method).
         
         Args:
             texts: List of input texts
@@ -63,11 +116,11 @@ class EmbeddingService:
         embedding2: List[float]
     ) -> float:
         """
-        Compute cosine similarity between two embeddings.
+        Compute cosine similarity between two embeddings (legacy method).
         
         Args:
-            embedding1: First embedding vector
-            embedding2: Second embedding vector
+            embedding1: First embedding vector (list)
+            embedding2: Second embedding vector (list)
             
         Returns:
             Similarity score between 0 and 1
@@ -77,15 +130,15 @@ class EmbeddingService:
         emb2 = np.array(embedding2).reshape(1, -1)
         
         # Compute cosine similarity
-        similarity = cosine_similarity(emb1, emb2)[0][0]
+        similarity = sklearn_cosine_similarity(emb1, emb2)[0][0]
         
         # Clamp to [0, 1] range
         return max(0.0, min(1.0, similarity))
     
     def find_best_matches(
         self,
-        query_embedding: List[float],
-        candidate_embeddings: List[List[float]],
+        query_embedding: Union[List[float], np.ndarray],
+        candidate_embeddings: Union[List[List[float]], np.ndarray],
         top_k: int = 5
     ) -> List[Dict[str, float]]:
         """
@@ -99,14 +152,22 @@ class EmbeddingService:
         Returns:
             List of dicts with 'index' and 'similarity' keys
         """
-        if not candidate_embeddings:
+        if not len(candidate_embeddings):
             return []
         
-        query = np.array(query_embedding).reshape(1, -1)
-        candidates = np.array(candidate_embeddings)
+        # Convert to numpy if needed
+        if isinstance(query_embedding, list):
+            query = np.array(query_embedding).reshape(1, -1)
+        else:
+            query = query_embedding.reshape(1, -1)
+        
+        if isinstance(candidate_embeddings, list):
+            candidates = np.array(candidate_embeddings)
+        else:
+            candidates = candidate_embeddings
         
         # Compute similarities
-        similarities = cosine_similarity(query, candidates)[0]
+        similarities = sklearn_cosine_similarity(query, candidates)[0]
         
         # Get top K indices
         top_indices = np.argsort(similarities)[::-1][:top_k]

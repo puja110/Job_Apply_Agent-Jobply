@@ -1,8 +1,9 @@
 # services/scoring_engine.py
 from typing import Dict, Optional
-from services.skill_matcher import SkillMatcher
+from services.embeddings import EmbeddingService  # Changed from embedding_service
 from models.scoring import ScoringWeights, ScoringConfig
-from models.user_profile import RemotePreference
+from models.user_profile import UserProfile
+from models.job import Job
 import logging
 
 logger = logging.getLogger(__name__)
@@ -12,34 +13,36 @@ class ScoringEngine:
     
     def __init__(
         self, 
-        skill_matcher: SkillMatcher,
+        embedding_service: EmbeddingService,
         config: Optional[ScoringConfig] = None
     ):
-        self.skill_matcher = skill_matcher
+        self.embedding_service = embedding_service
         self.config = config or ScoringConfig()
         self.config.weights.validate_weights()
     
-    def score_job(
+    async def score_job(
         self,
-        job_data: Dict,
-        user_profile: Dict
-    ) -> Dict:
+        job: Job,
+        user_profile: UserProfile
+    ) -> 'JobScore':
         """
         Calculate comprehensive score for a job.
         
         Args:
-            job_data: Job information
-            user_profile: User profile information
+            job: Job object
+            user_profile: UserProfile object
             
         Returns:
-            Dict with total_score and component scores
+            JobScore object
         """
+        from models.scoring import JobScore
+        
         # Component scores (all 0-100)
-        skill_score = self._score_skills(job_data, user_profile)
-        salary_score = self._score_salary(job_data, user_profile)
-        location_score = self._score_location(job_data, user_profile)
-        company_score = self._score_company(job_data, user_profile)
-        success_score = self._score_success_probability(job_data, user_profile)
+        skill_score = await self._score_skills(job, user_profile)
+        salary_score = self._score_salary(job, user_profile)
+        location_score = self._score_location(job, user_profile)
+        company_score = self._score_company(job, user_profile)
+        success_score = self._score_success_probability(job, user_profile)
         
         # Calculate weighted total
         weights = self.config.weights
@@ -48,58 +51,76 @@ class ScoringEngine:
             salary_score * weights.salary +
             location_score * weights.location +
             company_score * weights.company +
-            success_score * weights.success_probability
+            success_score * weights.success_prob
         )
         
         # Generate explanation
         explanation = self._generate_explanation(
             skill_score, salary_score, location_score, 
-            company_score, success_score, job_data
+            company_score, success_score
         )
         
-        return {
-            'total_score': round(total_score, 2),
-            'skill_match_score': round(skill_score, 2),
-            'salary_score': round(salary_score, 2),
-            'location_score': round(location_score, 2),
-            'company_score': round(company_score, 2),
-            'success_probability_score': round(success_score, 2),
-            'score_explanation': explanation
-        }
+        return JobScore(
+            job_id=job.id,
+            user_profile_id=user_profile.id,
+            overall_score=round(total_score, 2),
+            skill_score=round(skill_score, 2),
+            salary_score=round(salary_score, 2),
+            location_score=round(location_score, 2),
+            company_score=round(company_score, 2),
+            success_score=round(success_score, 2),
+            explanation=explanation,
+            job=job
+        )
     
-    def _score_skills(self, job_data: Dict, user_profile: Dict) -> float:
+    async def _score_skills(self, job: Job, user_profile: UserProfile) -> float:
         """Score skill match (0-100)."""
-        user_skills = user_profile.get('skills', [])
-        job_skills = job_data.get('skills', [])
+        user_skills = user_profile.skills or []
+        job_skills = job.skills or []
         
-        if not job_skills:
-            # If no skills specified, use semantic similarity
-            similarity = self.skill_matcher.compute_profile_job_similarity(
-                user_profile, job_data
-            )
-            return similarity * 100
+        if not job_skills and not job.description:
+            return 50.0  # Neutral if no skill info
         
-        # Match specific skills
-        match_result = self.skill_matcher.match_skills(user_skills, job_skills)
+        # Exact match scoring
+        user_skills_lower = {s.lower().strip() for s in user_skills}
+        job_skills_lower = {s.lower().strip() for s in job_skills}
         
-        # Base score on match percentage
-        base_score = match_result['match_percentage']
+        if job_skills_lower:
+            matched_skills = user_skills_lower.intersection(job_skills_lower)
+            match_percentage = (len(matched_skills) / len(job_skills_lower)) * 100
+        else:
+            match_percentage = 50.0
         
-        # Bonus for overall profile similarity
-        similarity = self.skill_matcher.compute_profile_job_similarity(
-            user_profile, job_data
-        )
-        similarity_bonus = similarity * 20  # Up to 20 bonus points
+        # Semantic similarity using embeddings
+        if job.description:
+            try:
+                user_text = ", ".join(user_skills)
+                job_text = f"{job.title}. {job.description[:500]}"
+                
+                # Use the correct method based on your EmbeddingService
+                embeddings = self.embedding_service.encode([user_text, job_text])
+                similarity = self.embedding_service.cosine_similarity(
+                    embeddings[0], embeddings[1]
+                )
+                
+                semantic_score = max(0, min(100, similarity * 100))
+                
+                # Combine exact match and semantic similarity
+                final_score = (match_percentage * 0.6) + (semantic_score * 0.4)
+            except Exception as e:
+                logger.warning(f"Semantic matching failed: {e}")
+                final_score = match_percentage
+        else:
+            final_score = match_percentage
         
-        final_score = min(100, base_score + similarity_bonus)
-        return final_score
+        return min(100, final_score)
     
-    def _score_salary(self, job_data: Dict, user_profile: Dict) -> float:
+    def _score_salary(self, job: Job, user_profile: UserProfile) -> float:
         """Score salary alignment (0-100)."""
-        job_min = job_data.get('salary_min')
-        job_max = job_data.get('salary_max')
-        user_min = user_profile.get('target_salary_min')
-        user_max = user_profile.get('target_salary_max')
+        job_min = job.salary_min
+        job_max = job.salary_max
+        user_min = user_profile.target_salary_min
+        user_max = user_profile.target_salary_max
         
         # If no salary data, return neutral score
         if not user_min or not job_min:
@@ -132,13 +153,13 @@ class ScoringEngine:
             else:
                 return 10.0  # Far below
     
-    def _score_location(self, job_data: Dict, user_profile: Dict) -> float:
+    def _score_location(self, job: Job, user_profile: UserProfile) -> float:
         """Score location match (0-100)."""
-        job_location = job_data.get('location', '').lower()
-        job_location_type = job_data.get('location_type', '').lower()
-        user_location = user_profile.get('preferred_location', '').lower()
-        remote_pref = user_profile.get('remote_preference', 'flexible').lower()
-        willing_to_relocate = user_profile.get('willing_to_relocate', False)
+        job_location = (job.location or '').lower()
+        job_location_type = str(job.location_type).lower() if job.location_type else ''
+        user_location = (user_profile.preferred_location or '').lower()
+        remote_pref = (user_profile.remote_preference or 'flexible').lower()
+        willing_to_relocate = user_profile.willing_to_relocate
         
         # Remote preference matching
         if remote_pref == 'remote_only':
@@ -177,17 +198,28 @@ class ScoringEngine:
             else:
                 return 60.0
     
-    def _score_company(self, job_data: Dict, user_profile: Dict) -> float:
+    def _score_company(self, job: Job, user_profile: UserProfile) -> float:
         """Score company match (0-100)."""
-        # For now, neutral score
-        # Can be enhanced with company data from external APIs
+        # Safely check for preferred_companies attribute
+        preferred_companies = getattr(user_profile, 'preferred_companies', None)
+        
+        if not preferred_companies:
+            return 50.0  # Neutral if no preference
+        
+        company_lower = job.company.lower()
+        preferred_lower = [c.lower() for c in preferred_companies]
+        
+        for preferred in preferred_lower:
+            if preferred in company_lower or company_lower in preferred:
+                return 100.0
+        
         return 50.0
     
-    def _score_success_probability(self, job_data: Dict, user_profile: Dict) -> float:
+    def _score_success_probability(self, job: Job, user_profile: UserProfile) -> float:
         """Score likelihood of success (0-100)."""
-        user_experience = user_profile.get('years_of_experience', 0)
-        user_level = user_profile.get('experience_level', 'mid').lower()
-        job_title = job_data.get('title', '').lower()
+        user_experience = user_profile.years_of_experience or 0
+        user_level = (user_profile.experience_level or 'mid').lower()
+        job_title = job.title.lower()
         
         # Parse seniority from title
         title_seniority = 'mid'  # default
@@ -223,8 +255,7 @@ class ScoringEngine:
         salary_score: float,
         location_score: float,
         company_score: float,
-        success_score: float,
-        job_data: Dict
+        success_score: float
     ) -> str:
         """Generate human-readable explanation of the score."""
         explanations = []

@@ -212,7 +212,7 @@ class BaseJobAgent(ABC):
                 RETURNING id
                 """,
                 job.raw_job_id, job.title, job.company, job.location,
-                job.location_type.value if job.location_type else None,
+                str(job.location_type) if job.location_type else None,
                 job.description, job.requirements, job.responsibilities,
                 job.salary_min, job.salary_max, job.salary_currency,
                 job.salary_period,
