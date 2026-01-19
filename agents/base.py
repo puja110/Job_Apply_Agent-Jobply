@@ -216,7 +216,7 @@ class BaseJobAgent(ABC):
                 job.description, job.requirements, job.responsibilities,
                 job.salary_min, job.salary_max, job.salary_currency,
                 job.salary_period,
-                job.employment_type.value if job.employment_type else None,
+                str(job.employment_type) if job.employment_type else None,
                 job.experience_level.value if job.experience_level else None,
                 job.posted_date, job.expires_date,
                 job.platform, str(job.platform_url), 
