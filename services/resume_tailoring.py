@@ -203,6 +203,14 @@ class ResumeTailoringService:
             summary_parts.append("by delivering high-quality technical solutions")
         
         tailored_summary = " ".join(summary_parts) + "."
+
+        required_skills = set(s.lower() for s in job.skills)
+        tailored_summary = self._inject_soft_skills_into_summary(
+            tailored_summary,
+            job,
+            required_skills,
+            user_profile.skills
+        )
         
         return tailored_summary
     
@@ -396,3 +404,63 @@ class ResumeTailoringService:
             missing_keywords=list(missing)[:10],
             suggestions=suggestions
         )
+    
+    def _inject_soft_skills_into_summary(
+        self,
+        base_summary: str,
+        job: Job,
+        required_skills: set,
+        user_skills: List[str]
+    ) -> str:
+        """
+        Inject soft skills into the summary if they're required by the job
+        
+        Args:
+            base_summary: Base summary text
+            job: Job posting
+            required_skills: Required skills from job
+            user_skills: All user skills (including soft skills)
+            
+        Returns:
+            Summary with soft skills incorporated
+        """
+        # Common soft skills to look for
+        soft_skill_keywords = {
+            'leadership': ['leadership', 'lead', 'mentor', 'mentoring', 'team lead'],
+            'communication': ['communication', 'collaborate', 'collaboration', 'stakeholder'],
+            'architecture': ['architecture', 'system design', 'design', 'architect'],
+            'agile': ['agile', 'scrum', 'sprint']
+        }
+        
+        # Flatten user skills for checking
+        user_skills_lower = set(s.lower() for s in user_skills)
+        
+        # Check which soft skills are required and user has
+        soft_skills_to_add = []
+        for skill_category, keywords in soft_skill_keywords.items():
+            # Check if job requires this skill
+            job_requires = any(kw in ' '.join(required_skills).lower() for kw in keywords)
+            # Check if user has this skill
+            user_has = any(kw in user_skills_lower for kw in keywords)
+            
+            if job_requires and user_has:
+                # Add the most appropriate term
+                if 'leadership' in keywords and user_has:
+                    soft_skills_to_add.append('leadership')
+                elif 'communication' in keywords and user_has:
+                    soft_skills_to_add.append('strong communication')
+                elif 'architecture' in keywords and user_has:
+                    soft_skills_to_add.append('system architecture')
+                elif 'agile' in keywords and user_has:
+                    soft_skills_to_add.append('Agile methodologies')
+        
+        # Inject soft skills into summary
+        if soft_skills_to_add:
+            # Add after the first sentence
+            sentences = base_summary.split('.')
+            if len(sentences) > 1:
+                soft_skills_phrase = f"Demonstrated expertise in {', '.join(soft_skills_to_add)}."
+                sentences.insert(1, soft_skills_phrase)
+                return '.'.join(sentences)
+        
+        return base_summary

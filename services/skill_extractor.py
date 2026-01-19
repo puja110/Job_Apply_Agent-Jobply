@@ -89,6 +89,20 @@ class SkillExtractor:
                 'Test-Driven Development', 'TDD', 'Behavior-Driven Development', 'BDD',
                 'Pair Programming', 'Code Review', 'System Design', 'Architecture',
                 'Leadership', 'Mentoring', 'Communication', 'Collaboration'
+            ],
+
+            # Soft Skills & Methodologies (UPDATE THIS SECTION)
+            'methodologies': [
+                'Agile', 'Scrum', 'Kanban', 'SAFe', 'Waterfall',
+                'Test-Driven Development', 'TDD', 'Behavior-Driven Development', 'BDD',
+                'Pair Programming', 'Code Review', 'System Design', 'Architecture',
+                'System Architecture', 'Software Architecture', 'Microservices Architecture',
+                'Leadership', 'Team Leadership', 'Technical Leadership',
+                'Mentoring', 'Coaching', 'Team Management',
+                'Communication', 'Technical Communication', 'Written Communication',
+                'Collaboration', 'Cross-functional Collaboration', 'Teamwork',
+                'Problem Solving', 'Critical Thinking', 'Analytical Skills',
+                'Project Management', 'Stakeholder Management', 'Product Management'
             ]
         }
     
