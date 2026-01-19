@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from typing import List, Optional
 import logging
 import asyncio
-import json  # ADD THIS
+import json
 from datetime import datetime
 
 from models.job import RawJob, Job
@@ -11,6 +11,7 @@ from models.search import JobSearchParams, JobSearchResult, SearchStatus
 from services.rate_limiter import RateLimiter
 from services.deduplicator import JobDeduplicator
 from utils.retry import retry_with_backoff
+from services.skill_extractor import get_skill_extractor
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ class BaseJobAgent(ABC):
         self.rate_limiter = rate_limiter
         self.deduplicator = deduplicator
         self.db = db_pool
+        self.skill_extractor = get_skill_extractor()
         
         logger.info(f"Initialized {self.platform} agent")
     
@@ -190,6 +192,15 @@ class BaseJobAgent(ABC):
     
     async def _store_job(self, job: Job) -> str:
         """Store normalized job."""
+
+        # Extract skills if not present or empty
+        if not job.skills or len(job.skills) == 0:
+            from services.skill_extractor import get_skill_extractor
+            skill_extractor = get_skill_extractor()
+            text = f"{job.title}. {job.description or ''}"
+            job.skills = skill_extractor.extract_skills(text, max_skills=30)
+            logger.info(f"Extracted {len(job.skills)} skills for job: {job.title}")
+            
         async with self.db.acquire() as conn:
             result = await conn.fetchrow(
                 """
