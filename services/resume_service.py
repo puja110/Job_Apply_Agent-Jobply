@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import List, Optional, Dict
 from uuid import UUID
 import asyncpg
+import json
 from datetime import datetime
 
 from services.pdf_generator import PDFGenerator
@@ -208,28 +209,34 @@ class ResumeService:
         This is a simplified version. In production, you'd use an LLM
         to intelligently tailor the content.
         """
-        # Extract user data
+        # Extract user data - parse JSON fields if they're strings
         skills = user_profile.get('skills', [])
         if isinstance(skills, str):
-            import json
             skills = json.loads(skills)
         
         experience = user_profile.get('experience', [])
         if isinstance(experience, str):
-            import json
             experience = json.loads(experience)
         
         education = user_profile.get('education', [])
         if isinstance(education, str):
-            import json
             education = json.loads(education)
+        
+        # Parse certifications and projects
+        certifications = user_profile.get('certifications', [])
+        if isinstance(certifications, str):
+            certifications = json.loads(certifications)
+        
+        projects = user_profile.get('projects', [])
+        if isinstance(projects, str):
+            projects = json.loads(projects)
         
         # Create contact info
         contact_info = {
             'name': user_profile.get('name', 'Puja Shrestha'),
             'email': user_profile.get('email', 'puja@example.com'),
             'phone': user_profile.get('phone', ''),
-            'location': user_profile.get('location', 'Barrie, ON, Canada'),
+            'location': user_profile.get('preferred_location', 'Barrie, ON, Canada'),
             'linkedin': user_profile.get('linkedin', ''),
             'github': user_profile.get('github', '')
         }
@@ -248,8 +255,8 @@ class ResumeService:
             experience=experience or [],
             education=education or [],
             skills=enhanced_skills,
-            certifications=user_profile.get('certifications', []),
-            projects=user_profile.get('projects', []),
+            certifications=certifications or [],
+            projects=projects or [],
             keywords_injected=job_keywords
         )
     

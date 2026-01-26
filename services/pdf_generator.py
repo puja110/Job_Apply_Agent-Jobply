@@ -1,5 +1,5 @@
 """
-PDF Generator Service for creating ATS-optimized resumes
+PDF Generator Service for creating ATS-optimized ONE-PAGE resumes
 """
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -20,7 +20,7 @@ from models.generated_resume import TailoredResumeData, ATSScores
 
 
 class PDFGenerator:
-    """Generate ATS-optimized PDF resumes"""
+    """Generate ATS-optimized ONE-PAGE PDF resumes"""
     
     def __init__(self, output_dir: Path = Path("./generated_resumes")):
         self.output_dir = output_dir
@@ -28,35 +28,35 @@ class PDFGenerator:
         self.styles = self._create_styles()
     
     def _create_styles(self) -> Dict[str, ParagraphStyle]:
-        """Create custom paragraph styles for ATS optimization"""
+        """Create custom paragraph styles for ATS optimization - ONE PAGE FORMAT"""
         styles = getSampleStyleSheet()
         
-        # ATS-optimized styles (simple, clean fonts)
+        # Compact ATS-optimized styles for one-page resume
         custom_styles = {
             'CustomTitle': ParagraphStyle(
                 'CustomTitle',
                 parent=styles['Heading1'],
-                fontSize=16,
+                fontSize=14,  # Reduced from 16
                 textColor=colors.HexColor('#1a1a1a'),
-                spaceAfter=6,
+                spaceAfter=4,  # Reduced from 6
                 alignment=TA_CENTER,
                 fontName='Helvetica-Bold'
             ),
             'ContactInfo': ParagraphStyle(
                 'ContactInfo',
                 parent=styles['Normal'],
-                fontSize=10,
+                fontSize=9,  # Reduced from 10
                 textColor=colors.HexColor('#333333'),
                 alignment=TA_CENTER,
-                spaceAfter=12
+                spaceAfter=8  # Reduced from 12
             ),
             'SectionHeader': ParagraphStyle(
                 'SectionHeader',
                 parent=styles['Heading2'],
-                fontSize=12,
+                fontSize=11,  # Reduced from 12
                 textColor=colors.HexColor('#1a1a1a'),
-                spaceAfter=6,
-                spaceBefore=12,
+                spaceAfter=3,  # Reduced from 6
+                spaceBefore=6,  # Reduced from 12
                 fontName='Helvetica-Bold',
                 borderWidth=0,
                 borderPadding=0,
@@ -67,35 +67,35 @@ class PDFGenerator:
             'JobTitle': ParagraphStyle(
                 'JobTitle',
                 parent=styles['Normal'],
-                fontSize=11,
+                fontSize=10,  # Reduced from 11
                 textColor=colors.HexColor('#1a1a1a'),
-                spaceAfter=2,
+                spaceAfter=1,  # Reduced from 2
                 fontName='Helvetica-Bold'
             ),
             'Company': ParagraphStyle(
                 'Company',
                 parent=styles['Normal'],
-                fontSize=10,
+                fontSize=9,  # Reduced from 10
                 textColor=colors.HexColor('#333333'),
-                spaceAfter=2,
+                spaceAfter=1,  # Reduced from 2
                 fontName='Helvetica-Oblique'
             ),
             'BodyText': ParagraphStyle(
                 'BodyText',
                 parent=styles['Normal'],
-                fontSize=10,
+                fontSize=9,  # Reduced from 10
                 textColor=colors.HexColor('#1a1a1a'),
-                spaceAfter=6,
-                leading=14
+                spaceAfter=4,  # Reduced from 6
+                leading=11  # Reduced from 14
             ),
             'BulletPoint': ParagraphStyle(
                 'BulletPoint',
                 parent=styles['Normal'],
-                fontSize=10,
+                fontSize=9,  # Reduced from 10
                 textColor=colors.HexColor('#1a1a1a'),
-                leftIndent=20,
-                spaceAfter=4,
-                leading=13
+                leftIndent=15,  # Reduced from 20
+                spaceAfter=2,  # Reduced from 4
+                leading=11  # Reduced from 13
             )
         }
         
@@ -108,20 +108,20 @@ class PDFGenerator:
         save_to_disk: bool = True
     ) -> tuple[bytes, Path]:
         """
-        Generate ATS-optimized PDF resume
+        Generate ATS-optimized ONE-PAGE PDF resume
         
         Returns:
             Tuple of (pdf_bytes, file_path)
         """
-        # Create PDF in memory
+        # Create PDF in memory with REDUCED MARGINS
         buffer = io.BytesIO()
         doc = SimpleDocTemplate(
             buffer,
             pagesize=letter,
-            rightMargin=0.75*inch,
-            leftMargin=0.75*inch,
-            topMargin=0.75*inch,
-            bottomMargin=0.75*inch
+            rightMargin=0.5*inch,  # Reduced from 0.75
+            leftMargin=0.5*inch,   # Reduced from 0.75
+            topMargin=0.5*inch,    # Reduced from 0.75
+            bottomMargin=0.5*inch  # Reduced from 0.75
         )
         
         # Build content
@@ -146,13 +146,13 @@ class PDFGenerator:
         if resume_data.education:
             story.extend(self._build_education(resume_data.education))
         
+        # Projects (limited to 2 for one-page)
+        if resume_data.projects:
+            story.extend(self._build_projects(resume_data.projects))
+        
         # Certifications
         if resume_data.certifications:
             story.extend(self._build_certifications(resume_data.certifications))
-        
-        # Projects
-        if resume_data.projects:
-            story.extend(self._build_projects(resume_data.projects))
         
         # Build PDF
         doc.build(story)
@@ -191,7 +191,7 @@ class PDFGenerator:
         
         contact_line = " | ".join(contact_parts)
         elements.append(Paragraph(contact_line, self.styles['ContactInfo']))
-        elements.append(Spacer(1, 0.1*inch))
+        elements.append(Spacer(1, 0.05*inch))  # Reduced from 0.1
         
         return elements
     
@@ -200,7 +200,7 @@ class PDFGenerator:
         elements = []
         elements.append(Paragraph("PROFESSIONAL SUMMARY", self.styles['SectionHeader']))
         elements.append(Paragraph(summary, self.styles['BodyText']))
-        elements.append(Spacer(1, 0.1*inch))
+        elements.append(Spacer(1, 0.05*inch))  # Reduced from 0.1
         return elements
     
     def _build_skills(self, skills: List[str]) -> List:
@@ -211,12 +211,12 @@ class PDFGenerator:
         # Group skills in a clean, parseable format
         skills_text = " • ".join(skills)
         elements.append(Paragraph(skills_text, self.styles['BodyText']))
-        elements.append(Spacer(1, 0.1*inch))
+        elements.append(Spacer(1, 0.05*inch))  # Reduced from 0.1
         
         return elements
     
     def _build_experience(self, experiences: List[dict]) -> List:
-        """Build work experience section"""
+        """Build work experience section - LIMITED TO 3 BULLETS PER JOB"""
         elements = []
         elements.append(Paragraph("PROFESSIONAL EXPERIENCE", self.styles['SectionHeader']))
         
@@ -238,13 +238,13 @@ class PDFGenerator:
             if location := exp.get('location'):
                 exp_elements.append(Paragraph(location, self.styles['Company']))
             
-            # Responsibilities/achievements
+            # Responsibilities/achievements - LIMITED TO 3 BULLETS
             if responsibilities := exp.get('responsibilities', []):
-                for resp in responsibilities:
+                for resp in responsibilities[:3]:  # LIMIT TO 3 BULLETS
                     bullet = f"• {resp}"
                     exp_elements.append(Paragraph(bullet, self.styles['BulletPoint']))
             
-            exp_elements.append(Spacer(1, 0.15*inch))
+            exp_elements.append(Spacer(1, 0.08*inch))  # Reduced from 0.15
             
             # Keep experience together
             elements.append(KeepTogether(exp_elements))
@@ -269,13 +269,17 @@ class PDFGenerator:
             edu_line = f"{institution} | {grad_date}"
             edu_elements.append(Paragraph(edu_line, self.styles['Company']))
             
-            # Additional details (GPA, honors, etc.)
+            # Additional details (GPA, honors, etc.) - COMPACT
+            details = []
             if gpa := edu.get('gpa'):
-                edu_elements.append(Paragraph(f"GPA: {gpa}", self.styles['BodyText']))
+                details.append(f"GPA: {gpa}")
             if honors := edu.get('honors'):
-                edu_elements.append(Paragraph(f"Honors: {honors}", self.styles['BodyText']))
+                details.append(honors)
             
-            edu_elements.append(Spacer(1, 0.1*inch))
+            if details:
+                edu_elements.append(Paragraph(" | ".join(details), self.styles['BodyText']))
+            
+            edu_elements.append(Spacer(1, 0.05*inch))  # Reduced from 0.1
             elements.append(KeepTogether(edu_elements))
         
         return elements
@@ -296,15 +300,15 @@ class PDFGenerator:
             
             elements.append(Paragraph(cert_line, self.styles['BulletPoint']))
         
-        elements.append(Spacer(1, 0.1*inch))
+        elements.append(Spacer(1, 0.05*inch))  # Reduced from 0.1
         return elements
     
     def _build_projects(self, projects: List[dict]) -> List:
-        """Build projects section"""
+        """Build projects section - LIMITED TO 2 PROJECTS"""
         elements = []
         elements.append(Paragraph("PROJECTS", self.styles['SectionHeader']))
         
-        for proj in projects:
+        for proj in projects[:2]:  # LIMIT TO 2 PROJECTS FOR ONE-PAGE
             proj_elements = []
             
             # Project name
@@ -320,12 +324,12 @@ class PDFGenerator:
             if description := proj.get('description'):
                 proj_elements.append(Paragraph(description, self.styles['BodyText']))
             
-            # Highlights
+            # Highlights - LIMITED TO 2 HIGHLIGHTS
             if highlights := proj.get('highlights', []):
-                for highlight in highlights:
+                for highlight in highlights[:2]:  # LIMIT TO 2 HIGHLIGHTS
                     proj_elements.append(Paragraph(f"• {highlight}", self.styles['BulletPoint']))
             
-            proj_elements.append(Spacer(1, 0.1*inch))
+            proj_elements.append(Spacer(1, 0.05*inch))  # Reduced from 0.1
             elements.append(KeepTogether(proj_elements))
         
         return elements
